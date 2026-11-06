@@ -19,6 +19,7 @@ import {
   Paper,
   TextField,
   Toolbar,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
@@ -39,6 +40,22 @@ import type { Column, ProjectDetail, Task, UserLite } from '../types';
 import AiDialog from './AiDialog';
 import MembersDialog from './MembersDialog';
 import TaskDialog from './TaskDialog';
+
+const fmtTokens = (n: number) =>
+  new Intl.NumberFormat('fr-FR', {
+    notation: n >= 10000 ? 'compact' : 'standard',
+    maximumFractionDigits: 1,
+  }).format(n);
+
+const fmtCost = (euros: number) => {
+  const small = euros > 0 && euros < 0.01;
+  return new Intl.NumberFormat('fr-FR', {
+    style: 'currency',
+    currency: 'EUR',
+    maximumFractionDigits: small ? 4 : 2,
+    minimumFractionDigits: small ? 4 : 2,
+  }).format(euros);
+};
 
 export default function Board({ projectId, onBack }: { projectId: string; onBack: () => void }) {
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
@@ -154,9 +171,31 @@ export default function Board({ projectId, onBack }: { projectId: string; onBack
         <IconButton edge="start" onClick={onBack} sx={{ mr: 1 }} aria-label="Retour aux projets">
           <ArrowBackIcon />
         </IconButton>
-        <Typography variant="h5" sx={{ flexGrow: 1 }}>
-          {detail.project.name}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexGrow: 1, minWidth: 0 }}>
+          <Typography variant="h5" noWrap>
+            {detail.project.name}
+          </Typography>
+          <Tooltip
+            title={`IA Mistral — depuis le début du projet : ${fmtTokens(
+              detail.ai_usage.prompt_tokens,
+            )} tokens envoyés, ${fmtTokens(
+              detail.ai_usage.completion_tokens,
+            )} tokens reçus, coût ${fmtCost(detail.ai_usage.cost_eur)}.`}
+          >
+            <Chip
+              size="small"
+              icon={<AutoAwesomeIcon />}
+              label={`${fmtTokens(detail.ai_usage.prompt_tokens)} ↑ · ${fmtTokens(
+                detail.ai_usage.completion_tokens,
+              )} ↓ · ${fmtCost(detail.ai_usage.cost_eur)}`}
+              sx={{
+                bgcolor: 'grey.100',
+                '& .MuiChip-icon': { color: 'primary.main' },
+                fontWeight: 500,
+              }}
+            />
+          </Tooltip>
+        </Box>
         <Button startIcon={<GroupIcon />} onClick={() => setMembersOpen(true)}>
           Membres ({detail.members.length})
         </Button>
