@@ -4,6 +4,8 @@ import type {
   GenerationSummary,
   Project,
   ProjectDetail,
+  ScrumResult,
+  SplitResult,
   Task,
   TaskWithComments,
   User,
@@ -120,4 +122,10 @@ export const api = {
     for (const f of files) form.append('files', f, f.name);
     return reqForm(`/api/projects/${projectId}/generate`, form) as Promise<GenerationSummary>;
   },
+
+  scrumTask: (taskId: string) =>
+    req(`/api/tasks/${taskId}/scrum`, { method: 'POST' }) as Promise<ScrumResult>,
+
+  splitTask: (taskId: string) =>
+    req(`/api/tasks/${taskId}/split`, { method: 'POST' }) as Promise<SplitResult>,
 };
