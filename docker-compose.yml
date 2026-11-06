@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kanban
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Definissez POSTGRES_PASSWORD dans .env}
+      POSTGRES_DB: kanban
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kanban -d kanban"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://kanban:${POSTGRES_PASSWORD}@postgres:5432/kanban
+      APP_URL: ${APP_URL:?Definissez APP_URL dans .env}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:?Definissez GITHUB_CLIENT_ID dans .env}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:?Definissez GITHUB_CLIENT_SECRET dans .env}
+      JWT_SECRET: ${JWT_SECRET:?Definissez JWT_SECRET dans .env}
+      RUST_LOG: info
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: deploy/Caddy.Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?Definissez DOMAIN dans .env}
+    depends_on:
+      - backend
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
