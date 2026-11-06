@@ -32,6 +32,7 @@ import SendIcon from '@mui/icons-material/Send';
 import type { SelectChangeEvent } from '@mui/material/Select';
 import { api } from '../api';
 import { fmtCost, fmtTokens, TYPE_COLORS, TYPE_LABELS } from '../format';
+import { PriorityChip } from './Roadmap';
 import type { ProjectDetail, TaskWithComments } from '../types';
 
 interface TaskDialogProps {
@@ -210,6 +211,7 @@ export default function TaskDialog({ taskId, detail, onClose, onChanged, onOpenT
           {t?.story_points != null && (
             <Chip size="small" label={`${t.story_points} story points`} variant="outlined" />
           )}
+          <PriorityChip priority={t?.priority ?? null} />
           {t && (
             <Tooltip
               title={`Consommation IA de ce ticket : ${fmtTokens(
