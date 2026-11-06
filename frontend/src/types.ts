@@ -60,11 +60,18 @@ export interface TaskWithComments {
   comments: CommentWithAuthor[];
 }
 
+export interface AiUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  cost_eur: number;
+}
+
 export interface ProjectDetail {
   project: Project;
   members: UserLite[];
   columns: Column[];
   tasks: Task[];
+  ai_usage: AiUsage;
 }
 
 export interface GenerationSummary {
