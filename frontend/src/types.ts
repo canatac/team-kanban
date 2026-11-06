@@ -29,6 +29,8 @@ export interface Column {
   created_at: string;
 }
 
+export type TaskType = 'epic' | 'story' | 'task' | 'bug';
+
 export interface Task {
   id: string;
   project_id: string;
@@ -40,6 +42,15 @@ export interface Task {
   created_by: string;
   created_at: string;
   updated_at: string;
+  task_type: TaskType;
+  parent_task_id: string | null;
+  user_story: string | null;
+  context: string | null;
+  expected_results: string[];
+  acceptance_criteria: string[];
+  definition_of_done: string[];
+  technical_notes: string | null;
+  story_points: number | null;
 }
 
 export interface Comment {
@@ -58,6 +69,7 @@ export interface CommentWithAuthor extends Comment {
 export interface TaskWithComments {
   task: Task;
   comments: CommentWithAuthor[];
+  ai_usage: AiUsage;
 }
 
 export interface AiUsage {
@@ -77,4 +89,14 @@ export interface ProjectDetail {
 export interface GenerationSummary {
   columns_created: number;
   tasks_created: number;
+}
+
+export interface ScrumResult {
+  task: Task;
+  split_recommendation: boolean;
+  split_reason: string;
+}
+
+export interface SplitResult {
+  created: Task[];
 }
