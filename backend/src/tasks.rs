@@ -13,7 +13,7 @@ use crate::projects::require_member;
 use crate::state::AppState;
 
 /// Liste canonique des colonnes de `tasks` (à utiliser dans tous les SELECT/RETURNING).
-pub const TASK_COLUMNS: &str = "id, project_id, column_id, title, description, position, assignee_id, created_by, created_at, updated_at, task_type, parent_task_id, user_story, context, expected_results, acceptance_criteria, definition_of_done, technical_notes, story_points";
+pub const TASK_COLUMNS: &str = "id, project_id, column_id, title, description, position, assignee_id, created_by, created_at, updated_at, task_type, parent_task_id, user_story, context, expected_results, acceptance_criteria, definition_of_done, technical_notes, story_points, priority";
 
 pub fn router() -> Router<AppState> {
     Router::new()
