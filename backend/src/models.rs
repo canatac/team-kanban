@@ -78,6 +78,14 @@ pub struct ProjectDetail {
     pub members: Vec<UserLite>,
     pub columns: Vec<Column>,
     pub tasks: Vec<Task>,
+    pub ai_usage: AiUsage,
+}
+
+#[derive(Serialize, FromRow)]
+pub struct AiUsage {
+    pub prompt_tokens: i64,
+    pub completion_tokens: i64,
+    pub cost_eur: f64,
 }
 
 #[derive(Serialize)]
