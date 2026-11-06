@@ -20,7 +20,9 @@ impl IntoResponse for AppError {
             AppError::BadRequest(m) => (StatusCode::BAD_REQUEST, m),
             AppError::Internal(m) => {
                 tracing::error!("Erreur interne : {m}");
-                (StatusCode::INTERNAL_SERVER_ERROR, "Erreur interne".to_string())
+                // Message complet renvoyé au client : indispensable pour
+                // diagnostiquer les échecs en production sans accès SSH.
+                (StatusCode::INTERNAL_SERVER_ERROR, format!("Erreur interne : {m}"))
             }
         };
         (status, Json(serde_json::json!({ "error": message }))).into_response()
