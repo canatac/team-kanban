@@ -193,12 +193,12 @@ export default function Board({ projectId, onBack }: { projectId: string; onBack
             />
           </Tooltip>
         </Box>
-        <ToggleButtonGroup<'board' | 'roadmap'>
+        <ToggleButtonGroup
           size="small"
           exclusive
           value={view}
           onChange={(_, v) => {
-            if (v !== null) setView(v);
+            if (v !== null) setView(v as 'board' | 'roadmap');
           }}
           sx={{ ml: 1 }}
         >
