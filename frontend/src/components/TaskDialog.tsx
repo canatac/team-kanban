@@ -367,7 +367,7 @@ export default function TaskDialog({ taskId, detail, onClose, onChanged, onOpenT
             )}
 
             {/* Fiche Scrum générée par IA */}
-            {(t.user_story || t.context || t.technical_notes) && (
+            {t && (t.user_story || t.context || t.technical_notes) && (
               <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 2, mt: 1 }}>
                 <Typography variant="subtitle1">Fiche Scrum</Typography>
                 {t.user_story && (
