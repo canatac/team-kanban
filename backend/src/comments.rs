@@ -74,7 +74,7 @@ async fn remove(
         &state,
         &task.project_id,
         "comment.deleted",
-        serde_json::json!({ "task_id": task.task_id.to_string() }),
+        serde_json::json!({ "task_id": comment.task_id.to_string() }),
     );
     Ok(StatusCode::NO_CONTENT)
 }
