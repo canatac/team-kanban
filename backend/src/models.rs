@@ -59,6 +59,7 @@ pub struct Task {
     pub definition_of_done: sqlx::types::Json<Vec<String>>,
     pub technical_notes: Option<String>,
     pub story_points: Option<i32>,
+    pub priority: Option<i32>,
 }
 
 #[derive(Serialize, FromRow)]
