@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import {
   Alert,
   Avatar,
@@ -367,7 +368,7 @@ interface TaskCardProps {
 function TaskCard({ task, members, onOpen }: TaskCardProps) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: task.id });
   const assignee = members.find((m) => m.id === task.assignee_id);
-  const style = transform
+  const style: CSSProperties | undefined = transform
     ? {
         transform: `translate(${transform.x}px, ${transform.y}px)`,
         position: 'relative',
