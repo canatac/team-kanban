@@ -23,6 +23,7 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import GroupIcon from '@mui/icons-material/Group';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
@@ -35,6 +36,7 @@ import {
 import { api } from '../api';
 import { useProjectSocket } from '../hooks/useProjectSocket';
 import type { Column, ProjectDetail, Task, UserLite } from '../types';
+import AiDialog from './AiDialog';
 import MembersDialog from './MembersDialog';
 import TaskDialog from './TaskDialog';
 
@@ -49,6 +51,7 @@ export default function Board({ projectId, onBack }: { projectId: string; onBack
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newColumnName, setNewColumnName] = useState('');
   const [renameValue, setRenameValue] = useState('');
+  const [aiOpen, setAiOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -156,6 +159,14 @@ export default function Board({ projectId, onBack }: { projectId: string; onBack
         </Typography>
         <Button startIcon={<GroupIcon />} onClick={() => setMembersOpen(true)}>
           Membres ({detail.members.length})
+        </Button>
+        <Button
+          startIcon={<AutoAwesomeIcon />}
+          variant="outlined"
+          onClick={() => setAiOpen(true)}
+          sx={{ ml: 1 }}
+        >
+          Générer avec l'IA
         </Button>
       </Toolbar>
       {error && (
@@ -284,6 +295,12 @@ export default function Board({ projectId, onBack }: { projectId: string; onBack
           onChanged={() => void loadRef.current()}
         />
       )}
+      <AiDialog
+        projectId={projectId}
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        onGenerated={() => void loadRef.current()}
+      />
       <MembersDialog
         open={membersOpen}
         detail={detail}
