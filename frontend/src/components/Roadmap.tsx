@@ -4,8 +4,6 @@ import {
   CardContent,
   Chip,
   List,
-  ListItemButton,
-  ListItemText,
   Paper,
   Tooltip,
   Typography,
@@ -45,7 +43,7 @@ function TypeChip({ task }: { task: Task }) {
   );
 }
 
-/** Liste imbriquée des descendants d'un ticket, triée par priorité. */
+/** Ligne d'un sous-ticket dans une carte : cliquable, priorité à droite. */
 function SubTree({
   task,
   childrenOf,
@@ -60,21 +58,31 @@ function SubTree({
   const kids = [...(childrenOf.get(task.id) ?? [])].sort(byPriority);
   return (
     <>
-      <ListItemButton
-        dense
-        sx={{ pl: 1 + depth * 2, borderRadius: 1 }}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          pl: 1 + depth * 2,
+          pr: 0.5,
+          py: 0.25,
+          borderRadius: 1,
+          cursor: 'pointer',
+          '&:hover': { bgcolor: 'action.hover' },
+        }}
         onClick={() => onOpenTask(task.id)}
-        secondaryAction={<PriorityChip priority={task.priority} />}
       >
-        <ListItemText
-          primary={task.title}
-          secondary={`${TYPE_LABELS[task.task_type]}${
-            task.story_points != null ? ` · ${task.story_points} pts` : ''
-          }`}
-          primaryTypographyProps={{ variant: 'body2' }}
-          secondaryTypographyProps={{ variant: 'caption', color: 'text.secondary' }}
-        />
-      </ListItemButton>
+        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+          <Typography variant="body2" noWrap>
+            {task.title}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {TYPE_LABELS[task.task_type]}
+            {task.story_points != null ? ` · ${task.story_points} pts` : ''}
+          </Typography>
+        </Box>
+        <PriorityChip priority={task.priority} />
+      </Box>
       {kids.map((kid) => (
         <SubTree
           key={kid.id}
