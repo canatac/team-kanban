@@ -18,6 +18,8 @@ import {
   MenuItem,
   Paper,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Toolbar,
   Tooltip,
   Typography,
@@ -40,6 +42,7 @@ import { useProjectSocket } from '../hooks/useProjectSocket';
 import type { Column, ProjectDetail, Task, UserLite } from '../types';
 import AiDialog from './AiDialog';
 import MembersDialog from './MembersDialog';
+import Roadmap, { PriorityChip } from './Roadmap';
 import TaskDialog from './TaskDialog';
 
 export default function Board({ projectId, onBack }: { projectId: string; onBack: () => void }) {
@@ -54,6 +57,7 @@ export default function Board({ projectId, onBack }: { projectId: string; onBack
   const [newColumnName, setNewColumnName] = useState('');
   const [renameValue, setRenameValue] = useState('');
   const [aiOpen, setAiOpen] = useState(false);
+  const [view, setView] = useState<'board' | 'roadmap'>('board');
 
   const load = useCallback(async () => {
     try {
@@ -189,6 +193,22 @@ export default function Board({ projectId, onBack }: { projectId: string; onBack
             />
           </Tooltip>
         </Box>
+        <ToggleButtonGroup<'board' | 'roadmap'>
+          size="small"
+          exclusive
+          value={view}
+          onChange={(_, v) => {
+            if (v !== null) setView(v);
+          }}
+          sx={{ ml: 1 }}
+        >
+          <ToggleButton value="board" aria-label="Vue tableau" title="Tableau kanban">
+            Kanban
+          </ToggleButton>
+          <ToggleButton value="roadmap" aria-label="Vue roadmap" title="Roadmap par priorité métier">
+            Roadmap
+          </ToggleButton>
+        </ToggleButtonGroup>
         <Button startIcon={<GroupIcon />} onClick={() => setMembersOpen(true)}>
           Membres ({detail.members.length})
         </Button>
@@ -206,7 +226,8 @@ export default function Board({ projectId, onBack }: { projectId: string; onBack
           {error}
         </Alert>
       )}
-      <DndContext onDragEnd={onDragEnd}>
+      {view === 'board' ? (
+        <DndContext onDragEnd={onDragEnd}>
         <Box sx={{ display: 'flex', gap: 2, overflowX: 'auto', p: 2, alignItems: 'flex-start' }}>
           {detail.columns.map((column) => (
             <ColumnView
@@ -246,7 +267,10 @@ export default function Board({ projectId, onBack }: { projectId: string; onBack
             </Button>
           </Paper>
         </Box>
-      </DndContext>
+        </DndContext>
+      ) : (
+        <Roadmap detail={detail} onOpenTask={setOpenTaskId} />
+      )}
 
       {/* Nouvelle tâche */}
       <Dialog open={!!addTaskColumn} onClose={() => setAddTaskColumn(null)} fullWidth maxWidth="sm">
@@ -463,6 +487,7 @@ function TaskCard({ task, childCount, members, onOpen }: TaskCardProps) {
             {task.story_points != null && (
               <Chip size="small" label={`${task.story_points} pts`} variant="outlined" />
             )}
+            <PriorityChip priority={task.priority} />
             {childCount > 0 && (
               <Chip size="small" label={`${childCount} ${childCount > 1 ? 'sous-tickets' : 'sous-ticket'}`} />
             )}
