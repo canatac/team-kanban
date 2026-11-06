@@ -28,11 +28,11 @@ const MAX_CHILDREN: usize = 8;
 const FICHE_RULES: &str = "Champs TOUS obligatoires et non vides :
 - task_type : \"epic\" (grand ensemble à découper), \"story\" (fonctionnalité utilisateur), \"task\" (tâche technique), \"bug\" (défaut).
 - user_story : « En tant que <rôle>, je veux <capacité>, afin de <bénéfice> ». Pour une tâche technique : « En tant qu'<équipe>, je veux <objectif>, afin de <bénéfice> ».
-- context : problème et contexte métier, 2 à 5 phrases.
-- expected_results : AU MOINS 2 résultats observables et mesurables.
-- acceptance_criteria : AU MOINS 2 critères vérifiables/testables.
-- definition_of_done : AU MOINS 3 critères de fin complets.
-- technical_notes : pistes d'implémentation concrètes, contraintes, hypothèses, points techniques.
+- context : problème et contexte métier, 2 à 3 phrases courtes.
+- expected_results : 2 à 4 résultats observables et mesurables, une phrase chacun.
+- acceptance_criteria : 2 à 4 critères vérifiables/testables, une phrase chacun.
+- definition_of_done : 3 à 5 critères de fin complets, une phrase chacun.
+- technical_notes : pistes d'implémentation concrètes, contraintes, hypothèses — 1 à 3 phrases.
 - story_points : entier de la suite 1, 2, 3, 5, 8, 13, 21.
 - business_priority : entier 1-10, 1 = priorité maximale ; hiérarchise selon la valeur métier du besoin défini au départ (bénéfices, urgence, risque, dépendances).";
 
@@ -167,12 +167,12 @@ async fn chat_json(
             { "role": "user", "content": user_content },
         ],
         "temperature": 0.2,
-        "max_tokens": 4000,
+        "max_tokens": 20000,
         "response_format": { "type": "json_object" },
     });
 
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(120))
+        .timeout(Duration::from_secs(240))
         .connect_timeout(Duration::from_secs(10))
         .build()
         .map_err(|e| AppError::Internal(format!("client HTTP indisponible : {e}")))?;
@@ -204,6 +204,21 @@ async fn chat_json(
         .pointer("/choices/0/message/content")
         .and_then(|c| c.as_str())
         .ok_or_else(|| AppError::Internal("réponse Mistral inattendue".to_string()))?;
+
+    // Réponse coupée par la limite de tokens : le JSON serait invalide,
+    // autant le dire clairement plutôt que de renvoyer une erreur de parse.
+    let finish_reason = payload
+        .pointer("/choices/0/finish_reason")
+        .and_then(|c| c.as_str())
+        .unwrap_or("");
+    if finish_reason == "length" {
+        return Err(AppError::BadRequest(
+            "la réponse de l'IA a atteint la taille maximale — allégez le brief \
+ou générez moins de tickets à la fois"
+                .to_string(),
+        ));
+    }
+
     let plan = serde_json::from_str::<serde_json::Value>(content)
         .map_err(|e| AppError::Internal(format!("réponse IA non exploitable : {e}")))?;
 
