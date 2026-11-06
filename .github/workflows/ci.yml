@@ -38,35 +38,6 @@ jobs:
         working-directory: frontend
 
 
-  ssh-debug:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Diagnostic secret SSH (structure uniquement)
-        env:
-          KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          HOST: ${{ secrets.SSH_HOST }}
-          SUSER: ${{ secrets.SSH_USER }}
-        run: |
-          echo "ssh: $(ssh -V 2>&1 || true)"
-          echo "len(KEY)=${#KEY} len(HOST)=${#HOST} len(SUSER)=${#SUSER}"
-          echo "lignes KEY=$(printf '%s' "$KEY" | wc -l)"
-          case "$KEY" in
-            *"BEGIN OPENSSH PRIVATE KEY"*) echo "header=OPENSSH";;
-            *"BEGIN RSA PRIVATE KEY"*) echo "header=RSA_PEM";;
-            *"BEGIN PRIVATE KEY"*) echo "header=PKCS8_PEM";;
-            *"BEGIN EC PRIVATE KEY"*) echo "header=EC_PEM";;
-            "") echo "header=EMPTY";;
-            *) echo "header=UNKNOWN";;
-          esac
-          if printf '%s' "$KEY" | grep -q "$(printf '\r')"; then echo "CRLF=present"; else echo "CRLF=absent"; fi
-          printf '%s\n' "$KEY" > /tmp/k; chmod 600 /tmp/k
-          if ssh-keygen -y -f /tmp/k > /tmp/pub 2>/tmp/err; then
-            echo "ssh-keygen -y: OK, prefix pubkey: $(head -c 40 /tmp/pub)"
-          else
-            echo "ssh-keygen -y: ECHEC"; cat /tmp/err
-          fi
-
   deploy:
     needs: [backend, frontend]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
