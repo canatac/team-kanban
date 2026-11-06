@@ -1,6 +1,7 @@
 import type {
   Column,
   Comment,
+  GenerationSummary,
   Project,
   ProjectDetail,
   Task,
@@ -39,6 +40,27 @@ async function req(path: string, init: RequestInit = {}): Promise<any> {
     throw new ApiError(res.status, message);
   }
   if (res.status === 204) return null;
+  return res.json();
+}
+
+// Comme req(), mais pour multipart/form-data : le navigateur fixe
+// lui-même l'en-tête Content-Type (boundary), il ne faut PAS le définir.
+async function reqForm(path: string, form: FormData): Promise<any> {
+  const res = await fetch(path, { method: 'POST', credentials: 'same-origin', body: form });
+  if (res.status === 401) {
+    window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+    throw new ApiError(401, 'Non authentifié');
+  }
+  if (!res.ok) {
+    let message = `Erreur ${res.status}`;
+    try {
+      const data = await res.json();
+      if (data?.error) message = data.error;
+    } catch {
+      /* corps non JSON */
+    }
+    throw new ApiError(res.status, message);
+  }
   return res.json();
 }
 
@@ -91,4 +113,11 @@ export const api = {
       body: JSON.stringify({ body }),
     }) as Promise<Comment>,
   deleteComment: (commentId: string) => req(`/api/comments/${commentId}`, { method: 'DELETE' }),
+
+  generateTasks: (projectId: string, prompt: string, files: File[]) => {
+    const form = new FormData();
+    form.append('prompt', prompt);
+    for (const f of files) form.append('files', f, f.name);
+    return reqForm(`/api/projects/${projectId}/generate`, form) as Promise<GenerationSummary>;
+  },
 };
