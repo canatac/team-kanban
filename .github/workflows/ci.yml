@@ -66,6 +66,7 @@ jobs:
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SSH_HOST }}
+          script_stop: true
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
