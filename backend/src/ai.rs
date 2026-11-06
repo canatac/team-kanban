@@ -33,9 +33,10 @@ const FICHE_RULES: &str = "Champs TOUS obligatoires et non vides :
 - acceptance_criteria : AU MOINS 2 critères vérifiables/testables.
 - definition_of_done : AU MOINS 3 critères de fin complets.
 - technical_notes : pistes d'implémentation concrètes, contraintes, hypothèses, points techniques.
-- story_points : entier de la suite 1, 2, 3, 5, 8, 13, 21.";
+- story_points : entier de la suite 1, 2, 3, 5, 8, 13, 21.
+- business_priority : entier 1-10, 1 = priorité maximale ; hiérarchise selon la valeur métier du besoin défini au départ (bénéfices, urgence, risque, dépendances).";
 
-const JSON_SHAPE: &str = "{\"task_type\": \"epic|story|task|bug\", \"user_story\": \"...\", \"context\": \"...\", \"expected_results\": [\"...\"], \"acceptance_criteria\": [\"...\"], \"definition_of_done\": [\"...\"], \"technical_notes\": \"...\", \"story_points\": N}";
+const JSON_SHAPE: &str = "{\"task_type\": \"epic|story|task|bug\", \"user_story\": \"...\", \"context\": \"...\", \"expected_results\": [\"...\"], \"acceptance_criteria\": [\"...\"], \"definition_of_done\": [\"...\"], \"technical_notes\": \"...\", \"story_points\": N, \"business_priority\": N}";
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -85,6 +86,8 @@ struct AiFiche {
     technical_notes: Option<String>,
     #[serde(default)]
     story_points: Option<i32>,
+    #[serde(default)]
+    business_priority: Option<i32>,
 }
 
 #[derive(Deserialize)]
@@ -284,8 +287,8 @@ async fn insert_task(
 ) -> Result<Task, AppError> {
     let task_type = normalize_type(fiche.task_type.as_deref());
     let task: Task = sqlx::query_as(&format!(
-        "INSERT INTO tasks (project_id, column_id, parent_task_id, title, description, position, created_by, task_type, user_story, context, expected_results, acceptance_criteria, definition_of_done, technical_notes, story_points) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) \
+        "INSERT INTO tasks (project_id, column_id, parent_task_id, title, description, position, created_by, task_type, user_story, context, expected_results, acceptance_criteria, definition_of_done, technical_notes, story_points, priority) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) \
          RETURNING {TASK_COLUMNS}"
     ))
     .bind(project_id)
@@ -303,6 +306,7 @@ async fn insert_task(
     .bind(SqlJson(clean_list(&fiche.definition_of_done)))
     .bind(&fiche.technical_notes)
     .bind(fiche.story_points.filter(|p| (1..=21).contains(p)))
+    .bind(fiche.business_priority.filter(|p| (1..=10).contains(p)))
     .fetch_one(&state.pool)
     .await?;
     Ok(task)
@@ -377,7 +381,7 @@ proposé (sinon chaîne vide)."
     let fiche = &parsed.fiche;
     let task_type = normalize_type(fiche.task_type.as_deref());
     let updated: Task = sqlx::query_as(&format!(
-        "UPDATE tasks SET task_type = $2, user_story = $3, context = $4, expected_results = $5, acceptance_criteria = $6, definition_of_done = $7, technical_notes = $8, story_points = $9, updated_at = now() WHERE id = $1 RETURNING {TASK_COLUMNS}"
+        "UPDATE tasks SET task_type = $2, user_story = $3, context = $4, expected_results = $5, acceptance_criteria = $6, definition_of_done = $7, technical_notes = $8, story_points = $9, priority = $10, updated_at = now() WHERE id = $1 RETURNING {TASK_COLUMNS}"
     ))
     .bind(task_id)
     .bind(&task_type)
@@ -388,6 +392,7 @@ proposé (sinon chaîne vide)."
     .bind(SqlJson(clean_list(&fiche.definition_of_done)))
     .bind(fiche.technical_notes.as_deref().map(str::trim))
     .bind(fiche.story_points.filter(|p| (1..=21).contains(p)))
+    .bind(fiche.business_priority.filter(|p| (1..=10).contains(p)))
     .fetch_one(&state.pool)
     .await?;
 
@@ -441,7 +446,10 @@ sans doublon ni trou, et chaque enfant doit pouvoir être livré indépendamment
 Réponds STRICTEMENT en JSON, sans texte autour : {{\"children\": [{{\"title\": \"titre court\", \
 {JSON_SHAPE}}}, ...]}}\n\
 {FICHE_RULES}\n\
-Pour chaque enfant, task_type doit être \"{child_type}\". Les titres sont courts (moins de 80 caractères)."
+Pour chaque enfant, task_type doit être \"{child_type}\". Les titres sont courts (moins de 80 caractères).\n\
+Attribue aux enfants des business_priority DISTINCTS : 1 pour l'enfant le plus prioritaire, \
+2 au suivant, etc. — selon la valeur métier du besoin initial et les dépendances entre \
+enfants (un enfant dont d'autres dépendent est plus prioritaire)."
     );
 
     let brief = format!(
@@ -607,6 +615,9 @@ Réponds STRICTEMENT en JSON, sans texte autour : \
 - Place les tickets dans les colonnes existantes quand c'est pertinent (reprends leur nom exact dans \"column\").\n\
 - Si le brief le justifie, propose de nouvelles colonnes dans \"new_columns\" (elles seront créées avant les tickets) ; place alors certains tickets dans ces nouvelles colonnes. Sinon laisse \"new_columns\" vide.\n\
 - Génère entre 3 et 15 tickets, couvrant concrètement le brief ; saute les tickets trop vagues.\n\
+- Hiérarchise les tickets avec business_priority (1-10) selon la valeur métier du besoin \
+exprimé dans le brief : 1 pour les tickets indispensables au premier incrément, et place \
+avant leurs dépendants ce dont ils dépendent.\n\
 - Identifie comme \"epic\" les ensembles trop larges pour un seul incrément ; ils pourront être \
 découpés ensuite en user stories. Les tickets plus fins sont des \"story\" ou \"task\".\n\
 - \"column\" doit toujours exister dans les colonnes existantes ou dans \"new_columns\"."
