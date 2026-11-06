@@ -42,18 +42,26 @@ jobs:
     needs: [backend, frontend]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
     steps:
       - uses: actions/checkout@v4
       - name: Synchroniser le code vers la VM
-        uses: easingthemes/ssh-deploy@v4
-        with:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          REMOTE_HOST: ${{ secrets.SSH_HOST }}
-          REMOTE_USER: ${{ secrets.SSH_USER }}
-          SOURCE: ./
-          TARGET: /opt/team-kanban/
-          EXCLUDE: ".git/,backend/target/,frontend/node_modules/,.env"
-          ARGS: "-rlgoDzvc --delete"
+        env:
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          rsync -rltzv --delete \
+            --exclude='.git/' \
+            --exclude='backend/target/' \
+            --exclude='frontend/node_modules/' \
+            --exclude='.env' \
+            -e "ssh -i ~/.ssh/deploy_key" \
+            ./ "$SSH_USER@$SSH_HOST:/opt/team-kanban/"
       - name: Configurer et redémarrer les services
         uses: appleboy/ssh-action@v1
         with:
