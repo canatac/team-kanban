@@ -9,7 +9,7 @@ use uuid::Uuid;
 use crate::auth::AuthUser;
 use crate::error::AppError;
 use crate::events::publish;
-use crate::models::{Column, Project, ProjectDetail, Task, UserLite};
+use crate::models::{AiUsage, Column, Project, ProjectDetail, Task, UserLite};
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -119,11 +119,18 @@ async fn detail(
     .bind(project_id)
     .fetch_all(&state.pool)
     .await?;
+    let ai_usage: AiUsage = sqlx::query_as(
+        "SELECT COALESCE(SUM(prompt_tokens), 0)::BIGINT AS prompt_tokens, COALESCE(SUM(completion_tokens), 0)::BIGINT AS completion_tokens, COALESCE(SUM(cost_eur), 0)::DOUBLE PRECISION AS cost_eur FROM ai_usage WHERE project_id = $1",
+    )
+    .bind(project_id)
+    .fetch_one(&state.pool)
+    .await?;
     Ok(Json(ProjectDetail {
         project,
         members,
         columns,
         tasks,
+        ai_usage,
     }))
 }
 
