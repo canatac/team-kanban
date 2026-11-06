@@ -152,7 +152,9 @@ un assistant de développement IA ait une vision fine du travail :
 - `acceptance_criteria` : critères d'acceptation vérifiables ;
 - `definition_of_done` : Definition of Done ;
 - `technical_notes` : pistes d'implémentation, contraintes, hypothèses ;
-- `story_points` : estimation en points de la suite de Fibonacci.
+- `story_points` : estimation en points de la suite de Fibonacci ;
+- `priority` : priorité métier 1-10 (1 = la plus haute), fixée par l'IA selon
+  le besoin métier défini au départ (valeur, urgence, risque, dépendances).
 
 Dans le détail d'un ticket :
 
@@ -166,6 +168,20 @@ Dans le détail d'un ticket :
   parent, et le parent est accessible depuis chaque enfant.
 - Les cartes du tableau affichent le type, les story points et le nombre de
   sous-tickets.
+
+### Vue Roadmap
+
+Bascule « Kanban / Roadmap » dans la barre d'un tableau :
+
+- Un **swimlane par epic**, trié par priorité métier (`priority`, P1 en premier).
+- Dans chaque lane : les **user stories** du epic en cartes (avec points et
+  priorité), et **leurs tâches techniques imbriquées** dans chaque carte
+  (triées par priorité, ouvrables en un clic).
+- Une lane « Tickets hors epic » regroupe les stories/tâches/bugs sans epic.
+- La priorisation vient du besoin métier défini au départ : le champ
+  `priority` est fixé par l'IA lors de la génération en masse, de la fiche
+  Scrum ou du découpage (rangs distincts entre frères et sœurs). Pour
+  re-prioriser un ticket, régénérez sa fiche Scrum.
 
 ### Suivi de consommation
 
