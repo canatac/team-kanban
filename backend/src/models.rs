@@ -50,6 +50,15 @@ pub struct Task {
     pub created_by: Uuid,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub task_type: String,
+    pub parent_task_id: Option<Uuid>,
+    pub user_story: Option<String>,
+    pub context: Option<String>,
+    pub expected_results: sqlx::types::Json<Vec<String>>,
+    pub acceptance_criteria: sqlx::types::Json<Vec<String>>,
+    pub definition_of_done: sqlx::types::Json<Vec<String>>,
+    pub technical_notes: Option<String>,
+    pub story_points: Option<i32>,
 }
 
 #[derive(Serialize, FromRow)]
@@ -92,4 +101,5 @@ pub struct AiUsage {
 pub struct TaskWithComments {
     pub task: Task,
     pub comments: Vec<CommentWithAuthor>,
+    pub ai_usage: AiUsage,
 }
