@@ -137,3 +137,10 @@ Bouton **« Générer avec l'IA »** dans la barre d'un tableau :
 
 Requiert le secret `MISTRAL_API_KEY` (console.mistral.ai → API Keys) dans les
 secrets du dépôt ; il est transmis au backend via le `.env` de la VM.
+
+### Suivi de consommation
+
+À côté du nom du projet, un badge affiche en continu les tokens envoyés/reçus
+et le coût estimé en euros depuis le début du projet. Chaque appel Mistral est
+journalisé en base (table `ai_usage`). Tarifs par défaut (euros / million de
+tokens, ajustables via l'environnement) : 0,15 en entrée, 0,60 en sortie.
