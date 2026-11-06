@@ -1,6 +1,6 @@
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use axum::routing::{delete, patch, post};
+use axum::routing::{patch, post};
 use axum::{Json, Router};
 use serde::Deserialize;
 use uuid::Uuid;
