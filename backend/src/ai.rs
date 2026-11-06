@@ -624,7 +624,7 @@ découpés ensuite en user stories. Les tickets plus fins sont des \"story\" ou 
     // 4. Création des nouvelles colonnes.
     let mut all_columns = columns;
     let mut columns_created = 0usize;
-    for name in plan.new_columns {
+    for name in parsed.new_columns {
         let name = name.trim().to_string();
         if name.is_empty()
             || all_columns
@@ -670,7 +670,7 @@ découpés ensuite en user stories. Les tickets plus fins sont des \"story\" ou 
     }
 
     let mut created_tasks: Vec<Task> = Vec::new();
-    for ai_task in plan.tasks.into_iter().take(MAX_TASKS) {
+    for ai_task in parsed.tasks.into_iter().take(MAX_TASKS) {
         let title = ai_task.title.trim().to_string();
         if title.is_empty() {
             continue;
