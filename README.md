@@ -121,3 +121,5 @@ Tout push sur `master` déclenche la CI (clippy, tests backend, build frontend) 
 ## Déploiement initial
 
 Premier déploiement de production sur kanban.misfits.ai (2026-11-06).
+
+- Redéploiement initial (correctif secrets SSH) : 2026-11-06.
