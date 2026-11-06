@@ -123,3 +123,17 @@ Tout push sur `master` déclenche la CI (clippy, tests backend, build frontend) 
 Premier déploiement de production sur kanban.misfits.ai (2026-11-06).
 
 - Redéploiement initial (correctif secrets SSH) : 2026-11-06.
+
+## Génération de tickets par IA (Mistral)
+
+Bouton **« Générer avec l'IA »** dans la barre d'un tableau :
+
+- Décrivez le projet dans le prompt (objectifs, équipe, contexte…).
+- Joignez jusqu'à 5 fichiers (≤ 10 Mo chacun) : images, PDF ou fichiers texte —
+  ils sont analysés par le modèle (`mistral-small-latest`).
+- L'IA propose des tickets, crée d'éventuelles nouvelles colonnes, et répartit
+  les tickets dans les colonnes existantes. Tout apparaît en temps réel
+  (WebSocket) pour tous les membres connectés.
+
+Requiert le secret `MISTRAL_API_KEY` (console.mistral.ai → API Keys) dans les
+secrets du dépôt ; il est transmis au backend via le `.env` de la VM.
