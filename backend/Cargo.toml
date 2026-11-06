@@ -5,7 +5,8 @@ edition = "2021"
 
 [dependencies]
 async-trait = "0.1"
-axum = { version = "0.7", features = ["ws"] }
+axum = { version = "0.7", features = ["ws", "multipart"] }
+base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
 futures-util = "0.3"
 jsonwebtoken = "9"
