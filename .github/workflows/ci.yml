@@ -42,6 +42,11 @@ jobs:
     needs: [backend, frontend]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
+    # Un seul déploiement à la fois : des `compose up` concurrents sur la VM
+    # provoquent des conflits de noms de conteneurs.
+    concurrency:
+      group: deploy-team-kanban
+      cancel-in-progress: false
     env:
       SSH_HOST: ${{ secrets.SSH_HOST }}
       SSH_USER: ${{ secrets.SSH_USER }}
@@ -80,5 +85,6 @@ jobs:
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
             EOF
             cd /opt/team-kanban
+            docker ps -a --format '{{.Names}}' | grep -E '^[0-9a-f]{12}_team-kanban-' | xargs -r docker rm -f || true
             docker compose up -d --build
             docker image prune -f
