@@ -186,6 +186,26 @@ Règles :\n\
     let plan: AiPlan = serde_json::from_str(content)
         .map_err(|e| AppError::Internal(format!("réponse IA non exploitable : {e}")))?;
 
+    // 4a. Enregistre la consommation de cet appel (tokens réellement facturés).
+    let usage = payload.get("usage").cloned().unwrap_or_else(|| serde_json::json!({}));
+    let prompt_tokens = usage.get("prompt_tokens").and_then(|v| v.as_i64()).unwrap_or(0);
+    let completion_tokens = usage
+        .get("completion_tokens")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    let cost_eur = (prompt_tokens as f64 * state.cfg.mistral_price_input_eur_per_mtok
+        + completion_tokens as f64 * state.cfg.mistral_price_output_eur_per_mtok)
+        / 1_000_000.0;
+    sqlx::query(
+        "INSERT INTO ai_usage (project_id, prompt_tokens, completion_tokens, cost_eur) VALUES ($1, $2, $3, $4)",
+    )
+    .bind(project_id)
+    .bind(prompt_tokens)
+    .bind(completion_tokens)
+    .bind(cost_eur)
+    .execute(&state.pool)
+    .await?;
+
     // 4. Création des nouvelles colonnes.
     let mut all_columns = columns;
     let mut columns_created = 0usize;
