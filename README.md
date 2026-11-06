@@ -117,3 +117,7 @@ Tout push sur `master` déclenche la CI (clippy, tests backend, build frontend) 
 
 - Le glisser-déposer déplace les tâches **entre colonnes** ; le réordonnancement fin au sein d'une colonne n'est pas encore implémenté.
 - Écritures concurrentes sur une même tâche : « dernier gagnant », avec resynchronisation immédiate des clients via WebSocket.
+
+## Déploiement initial
+
+Premier déploiement de production sur kanban.misfits.ai (2026-11-06).
