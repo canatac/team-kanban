@@ -1,3 +1,4 @@
+mod ai;
 mod auth;
 mod columns;
 mod comments;
@@ -50,6 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let app = axum::Router::new()
         .merge(auth::router())
+        .merge(ai::router())
         .merge(projects::router())
         .merge(columns::router())
         .merge(tasks::router())
