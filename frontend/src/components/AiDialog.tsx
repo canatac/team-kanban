@@ -99,7 +99,7 @@ export default function AiDialog({ projectId, open, onClose, onGenerated }: AiDi
           multiline
           minRows={5}
           label="Décrivez le projet, l'équipe, les objectifs…"
-          placeholder="Ex. : Application mobile de covoiturage pour les employés : covoiturage domicile-travail, flotte de voitures partagées, réservation, badges de fidélité, facturation mensuelle…"
+          placeholder="Ex. : Application mobile de covoiturage pour les employés : covoiturage domicile-travail, flotte de voitures partagées, réservation, badges de fidélité, facturation mensuelle… Chaque ticket généré recevra une fiche Scrum complète (user story, résultats attendus, critères d'acceptation, Definition of Done)."
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           disabled={busy}
@@ -142,7 +142,7 @@ export default function AiDialog({ projectId, open, onClose, onGenerated }: AiDi
 
         {busy && (
           <Alert severity="info" icon={<CircularProgress size={20} />} sx={{ mt: 2 }}>
-            L'IA analyse votre demande et rédige les tickets… (jusqu'à une minute)
+            L'IA analyse votre demande et rédige les tickets avec leur fiche Scrum complète… (jusqu'à une minute)
           </Alert>
         )}
         {error && (
