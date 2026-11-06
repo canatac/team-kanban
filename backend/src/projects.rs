@@ -114,7 +114,7 @@ async fn detail(
     .fetch_all(&state.pool)
     .await?;
     let tasks: Vec<Task> = sqlx::query_as(
-        "SELECT id, project_id, column_id, title, description, position, assignee_id, created_by, created_at, updated_at FROM tasks WHERE project_id = $1 ORDER BY position",
+        &format!("{} FROM tasks WHERE project_id = $1 ORDER BY position", crate::tasks::TASK_COLUMNS),
     )
     .bind(project_id)
     .fetch_all(&state.pool)
