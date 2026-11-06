@@ -131,16 +131,52 @@ Bouton **« Générer avec l'IA »** dans la barre d'un tableau :
 - Décrivez le projet dans le prompt (objectifs, équipe, contexte…).
 - Joignez jusqu'à 5 fichiers (≤ 10 Mo chacun) : images, PDF ou fichiers texte —
   ils sont analysés par le modèle (`mistral-small-latest`).
-- L'IA propose des tickets, crée d'éventuelles nouvelles colonnes, et répartit
-  les tickets dans les colonnes existantes. Tout apparaît en temps réel
-  (WebSocket) pour tous les membres connectés.
+- L'IA propose des tickets **avec leur fiche Scrum complète** (voir ci-dessous),
+  crée d'éventuelles nouvelles colonnes, et répartit les tickets dans les
+  colonnes existantes. Tout apparaît en temps réel (WebSocket) pour tous les
+  membres connectés.
 
 Requiert le secret `MISTRAL_API_KEY` (console.mistral.ai → API Keys) dans les
 secrets du dépôt ; il est transmis au backend via le `.env` de la VM.
 
+### Fiches Scrum et découpage des tickets
+
+Chaque ticket porte une fiche Scrum stricte, pensée pour qu'un développeur ou
+un assistant de développement IA ait une vision fine du travail :
+
+- `task_type` : `epic` (grand ensemble à découper), `story` (fonctionnalité
+  utilisateur), `task` (tâche technique) ou `bug` ;
+- `user_story` : « En tant que <rôle>, je veux <capacité>, afin de <bénéfice> » ;
+- `context` : problème et contexte métier ;
+- `expected_results` : résultats attendus, observables et mesurables ;
+- `acceptance_criteria` : critères d'acceptation vérifiables ;
+- `definition_of_done` : Definition of Done ;
+- `technical_notes` : pistes d'implémentation, contraintes, hypothèses ;
+- `story_points` : estimation en points de la suite de Fibonacci.
+
+Dans le détail d'un ticket :
+
+- **« Fiche Scrum (IA) »** génère (ou régénère) la fiche complète du ticket
+  à partir de son titre et de sa description — soignez-les pour un meilleur
+  résultat. Si l'IA juge le ticket trop large, une bannière propose de le
+  découper, avec la raison.
+- **« Découper (IA) »** découpe le ticket en 2 à 8 sous-tickets rattachés
+  (un epic devient des user stories, sinon des tâches techniques), chacun
+  avec sa propre fiche Scrum. Les sous-tickets sont listés dans le ticket
+  parent, et le parent est accessible depuis chaque enfant.
+- Les cartes du tableau affichent le type, les story points et le nombre de
+  sous-tickets.
+
 ### Suivi de consommation
 
-À côté du nom du projet, un badge affiche en continu les tokens envoyés/reçus
-et le coût estimé en euros depuis le début du projet. Chaque appel Mistral est
-journalisé en base (table `ai_usage`). Tarifs par défaut (euros / million de
-tokens, ajustables via l'environnement) : 0,15 en entrée, 0,60 en sortie.
+- À côté du nom du projet, un badge affiche en continu les tokens envoyés/reçus
+  et le coût estimé en euros **depuis le début du projet** — c'est la somme
+  exacte de toutes les lignes de la table `ai_usage`.
+- Dans le détail de chaque ticket, un badge affiche les tokens et le coût
+  **de ce ticket**. La consommation d'un appel est répartie sur les tickets
+  qu'il crée (génération en masse, découpage) ou rattachée au ticket généré
+  (fiche Scrum). Supprimer un ticket ne fausse pas le total projet : sa
+  consommation reste comptée (rattachée au projet).
+
+Tarifs par défaut (euros / million de tokens, ajustables via l'environnement) :
+0,15 en entrée, 0,60 en sortie.
