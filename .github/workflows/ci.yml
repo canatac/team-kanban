@@ -63,8 +63,8 @@ jobs:
             cat > /opt/team-kanban/.env <<'EOF'
             DOMAIN=${{ secrets.DOMAIN }}
             APP_URL=https://${{ secrets.DOMAIN }}
-            GITHUB_CLIENT_ID=${{ secrets.GITHUB_CLIENT_ID }}
-            GITHUB_CLIENT_SECRET=${{ secrets.GITHUB_CLIENT_SECRET }}
+            GITHUB_CLIENT_ID=${{ secrets.GH_CLIENT_ID }}
+            GITHUB_CLIENT_SECRET=${{ secrets.GH_CLIENT_SECRET }}
             JWT_SECRET=${{ secrets.JWT_SECRET }}
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
             EOF
