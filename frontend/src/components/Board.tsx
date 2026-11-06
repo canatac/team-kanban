@@ -35,27 +35,12 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core';
 import { api } from '../api';
+import { fmtCost, fmtTokens, TYPE_COLORS, TYPE_LABELS } from '../format';
 import { useProjectSocket } from '../hooks/useProjectSocket';
 import type { Column, ProjectDetail, Task, UserLite } from '../types';
 import AiDialog from './AiDialog';
 import MembersDialog from './MembersDialog';
 import TaskDialog from './TaskDialog';
-
-const fmtTokens = (n: number) =>
-  new Intl.NumberFormat('fr-FR', {
-    notation: n >= 10000 ? 'compact' : 'standard',
-    maximumFractionDigits: 1,
-  }).format(n);
-
-const fmtCost = (euros: number) => {
-  const small = euros > 0 && euros < 0.01;
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency: 'EUR',
-    maximumFractionDigits: small ? 4 : 2,
-    minimumFractionDigits: small ? 4 : 2,
-  }).format(euros);
-};
 
 export default function Board({ projectId, onBack }: { projectId: string; onBack: () => void }) {
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
@@ -165,6 +150,14 @@ export default function Board({ projectId, onBack }: { projectId: string; onBack
     );
   }
 
+  // Nombre de sous-tickets rattachés à chaque ticket (pour les cartes).
+  const childCounts = new Map<string, number>();
+  for (const t of detail.tasks) {
+    if (t.parent_task_id) {
+      childCounts.set(t.parent_task_id, (childCounts.get(t.parent_task_id) ?? 0) + 1);
+    }
+  }
+
   return (
     <Box>
       <Toolbar>
@@ -220,6 +213,7 @@ export default function Board({ projectId, onBack }: { projectId: string; onBack
               key={column.id}
               column={column}
               tasks={detail.tasks.filter((t) => t.column_id === column.id)}
+              childCounts={childCounts}
               members={detail.members}
               onOpenTask={setOpenTaskId}
               onAddTask={setAddTaskColumn}
@@ -332,6 +326,7 @@ export default function Board({ projectId, onBack }: { projectId: string; onBack
           detail={detail}
           onClose={() => setOpenTaskId(null)}
           onChanged={() => void loadRef.current()}
+          onOpenTask={setOpenTaskId}
         />
       )}
       <AiDialog
@@ -353,6 +348,7 @@ export default function Board({ projectId, onBack }: { projectId: string; onBack
 interface ColumnViewProps {
   column: Column;
   tasks: Task[];
+  childCounts: Map<string, number>;
   members: UserLite[];
   onOpenTask: (id: string) => void;
   onAddTask: (column: Column) => void;
@@ -360,7 +356,7 @@ interface ColumnViewProps {
   onDelete: (column: Column) => void;
 }
 
-function ColumnView({ column, tasks, members, onOpenTask, onAddTask, onRename, onDelete }: ColumnViewProps) {
+function ColumnView({ column, tasks, childCounts, members, onOpenTask, onAddTask, onRename, onDelete }: ColumnViewProps) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
 
@@ -401,7 +397,13 @@ function ColumnView({ column, tasks, members, onOpenTask, onAddTask, onRename, o
         </Menu>
       </Box>
       {tasks.map((task) => (
-        <TaskCard key={task.id} task={task} members={members} onOpen={() => onOpenTask(task.id)} />
+        <TaskCard
+          key={task.id}
+          task={task}
+          childCount={childCounts.get(task.id) ?? 0}
+          members={members}
+          onOpen={() => onOpenTask(task.id)}
+        />
       ))}
       <Button
         fullWidth
@@ -417,11 +419,12 @@ function ColumnView({ column, tasks, members, onOpenTask, onAddTask, onRename, o
 
 interface TaskCardProps {
   task: Task;
+  childCount: number;
   members: UserLite[];
   onOpen: () => void;
 }
 
-function TaskCard({ task, members, onOpen }: TaskCardProps) {
+function TaskCard({ task, childCount, members, onOpen }: TaskCardProps) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: task.id });
   const assignee = members.find((m) => m.id === task.assignee_id);
   const style: CSSProperties | undefined = transform
@@ -455,18 +458,26 @@ function TaskCard({ task, members, onOpen }: TaskCardProps) {
         </IconButton>
         <Box sx={{ flexGrow: 1 }}>
           <Typography variant="body2">{task.title}</Typography>
-          {assignee && (
-            <Chip
-              size="small"
-              sx={{ mt: 0.5 }}
-              avatar={
-                <Avatar src={assignee.avatar_url ?? undefined}>
-                  {assignee.login.charAt(0).toUpperCase()}
-                </Avatar>
-              }
-              label={assignee.login}
-            />
-          )}
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
+            <Chip size="small" label={TYPE_LABELS[task.task_type]} color={TYPE_COLORS[task.task_type]} variant="outlined" />
+            {task.story_points != null && (
+              <Chip size="small" label={`${task.story_points} pts`} variant="outlined" />
+            )}
+            {childCount > 0 && (
+              <Chip size="small" label={`${childCount} ${childCount > 1 ? 'sous-tickets' : 'sous-ticket'}`} />
+            )}
+            {assignee && (
+              <Chip
+                size="small"
+                avatar={
+                  <Avatar src={assignee.avatar_url ?? undefined}>
+                    {assignee.login.charAt(0).toUpperCase()}
+                  </Avatar>
+                }
+                label={assignee.login}
+              />
+            )}
+          </Box>
         </Box>
       </CardContent>
     </Card>
