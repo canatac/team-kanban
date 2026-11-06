@@ -66,3 +66,8 @@ export interface ProjectDetail {
   columns: Column[];
   tasks: Task[];
 }
+
+export interface GenerationSummary {
+  columns_created: number;
+  tasks_created: number;
+}
