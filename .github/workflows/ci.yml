@@ -76,6 +76,7 @@ jobs:
             GITHUB_CLIENT_ID=${{ secrets.GH_CLIENT_ID }}
             GITHUB_CLIENT_SECRET=${{ secrets.GH_CLIENT_SECRET }}
             JWT_SECRET=${{ secrets.JWT_SECRET }}
+            MISTRAL_API_KEY=${{ secrets.MISTRAL_API_KEY }}
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
             EOF
             cd /opt/team-kanban
