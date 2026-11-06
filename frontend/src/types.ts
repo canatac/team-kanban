@@ -51,6 +51,7 @@ export interface Task {
   definition_of_done: string[];
   technical_notes: string | null;
   story_points: number | null;
+  priority: number | null;
 }
 
 export interface Comment {
