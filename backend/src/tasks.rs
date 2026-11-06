@@ -8,9 +8,12 @@ use uuid::Uuid;
 use crate::auth::AuthUser;
 use crate::error::AppError;
 use crate::events::publish;
-use crate::models::{Column, CommentWithAuthor, Task, TaskWithComments};
+use crate::models::{AiUsage, Column, CommentWithAuthor, Task, TaskWithComments};
 use crate::projects::require_member;
 use crate::state::AppState;
+
+/// Liste canonique des colonnes de `tasks` (à utiliser dans tous les SELECT/RETURNING).
+pub const TASK_COLUMNS: &str = "id, project_id, column_id, title, description, position, assignee_id, created_by, created_at, updated_at, task_type, parent_task_id, user_story, context, expected_results, acceptance_criteria, definition_of_done, technical_notes, story_points";
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -19,9 +22,9 @@ pub fn router() -> Router<AppState> {
 }
 
 pub async fn get_task_row(state: &AppState, id: Uuid) -> Result<Task, AppError> {
-    sqlx::query_as(
-        "SELECT id, project_id, column_id, title, description, position, assignee_id, created_by, created_at, updated_at FROM tasks WHERE id = $1",
-    )
+    sqlx::query_as(&format!(
+        "SELECT {TASK_COLUMNS} FROM tasks WHERE id = $1"
+    ))
     .bind(id)
     .fetch_one(&state.pool)
     .await
@@ -59,7 +62,9 @@ async fn create(
         .fetch_one(&state.pool)
         .await?;
     let position = row.0.unwrap_or(-1.0) + 1.0;
-    let task: Task = sqlx::query_as("INSERT INTO tasks (project_id, column_id, title, description, position, created_by) VALUES ($1, $2, $3, NULL, $4, $5) RETURNING id, project_id, column_id, title, description, position, assignee_id, created_by, created_at, updated_at")
+    let task: Task = sqlx::query_as(&format!(
+        "INSERT INTO tasks (project_id, column_id, title, description, position, created_by) VALUES ($1, $2, $3, NULL, $4, $5) RETURNING {TASK_COLUMNS}"
+    ))
         .bind(project_id)
         .bind(body.column_id)
         .bind(&title)
@@ -89,7 +94,17 @@ async fn get_task(
     .bind(id)
     .fetch_all(&state.pool)
     .await?;
-    Ok(Json(TaskWithComments { task, comments }))
+    let ai_usage: AiUsage = sqlx::query_as(
+        "SELECT COALESCE(SUM(prompt_tokens), 0)::BIGINT AS prompt_tokens, COALESCE(SUM(completion_tokens), 0)::BIGINT AS completion_tokens, COALESCE(SUM(cost_eur), 0)::DOUBLE PRECISION AS cost_eur FROM ai_usage WHERE task_id = $1",
+    )
+    .bind(id)
+    .fetch_one(&state.pool)
+    .await?;
+    Ok(Json(TaskWithComments {
+        task,
+        comments,
+        ai_usage,
+    }))
 }
 
 #[derive(Deserialize)]
@@ -139,7 +154,9 @@ async fn update(
         Some(t) if !t.trim().is_empty() => t.trim().to_string(),
         _ => existing.title.clone(),
     };
-    let task: Task = sqlx::query_as("UPDATE tasks SET title = $2, description = $3, column_id = $4, position = $5, assignee_id = $6, updated_at = now() WHERE id = $1 RETURNING id, project_id, column_id, title, description, position, assignee_id, created_by, created_at, updated_at")
+    let task: Task = sqlx::query_as(&format!(
+        "UPDATE tasks SET title = $2, description = $3, column_id = $4, position = $5, assignee_id = $6, updated_at = now() WHERE id = $1 RETURNING {TASK_COLUMNS}"
+    ))
         .bind(id)
         .bind(&title)
         .bind(&body.description)
