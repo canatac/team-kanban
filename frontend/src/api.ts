@@ -1,6 +1,7 @@
 import type {
   Column,
   Comment,
+  FoundationResult,
   GenerationSummary,
   Project,
   ProjectDetail,
@@ -128,4 +129,10 @@ export const api = {
 
   splitTask: (taskId: string) =>
     req(`/api/tasks/${taskId}/split`, { method: 'POST' }) as Promise<SplitResult>,
+
+  createFoundation: (name: string, projectIds: string[]) =>
+    req('/api/foundation', {
+      method: 'POST',
+      body: JSON.stringify({ name, project_ids: projectIds }),
+    }) as Promise<FoundationResult>,
 };
