@@ -27,6 +27,7 @@ pub struct Project {
     pub name: String,
     pub owner_id: Uuid,
     pub created_at: DateTime<Utc>,
+    pub kind: String,
 }
 
 #[derive(Serialize, FromRow)]
