@@ -184,6 +184,28 @@ Bascule « Kanban / Roadmap » dans la barre d'un tableau :
   Scrum ou du découpage (rangs distincts entre frères et sœurs). Pour
   re-prioriser un ticket, régénérez sa fiche Scrum.
 
+### Réorganisation en epics (IA)
+
+Le bouton « Organiser en epics » dans la barre d'un tableau (désactivé sous
+2 tickets) demande à Mistral de déduire la structure d'epics du projet :
+
+1. Le backend envoie au modèle les tickets de **premier niveau** (sans epic,
+   ou déjà rattachés à un epic — les sous-tickets suivent leur parent) ainsi
+   que les epics existants.
+2. Mistral les regroupe en epics cohérents : il **réutilise les epics
+   existants** quand un groupe leur correspond (re-priorisés au passage),
+   et crée les nouveaux epics manquants (fiche Scrum, priorité métier).
+3. Tous les tickets de premier niveau sont rattachés à leur epic — un ticket
+   sans groupe repart « hors epic ». Titres et contenus ne sont jamais
+   modifiés.
+4. L'interface bascule automatiquement sur la vue Roadmap pour voir
+   l'agencement ; tout est temps réel pour les collaborateurs connectés.
+
+Limites : 150 tickets de premier niveau maximum, 15 epics par réorganisation.
+La consommation de l'appel est répartie sur les epics créés (ou rattachée au
+projet si aucun n'est créé).
+API : `POST /api/projects/:id/epics` → `{ epics, created, moved }`.
+
 ### Suivi de consommation
 
 - À côté du nom du projet, un badge affiche en continu les tokens envoyés/reçus
