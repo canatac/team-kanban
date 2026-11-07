@@ -1,6 +1,7 @@
 import type {
   Column,
   Comment,
+  EpicsResult,
   FoundationResult,
   GenerationSummary,
   Project,
@@ -135,4 +136,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ name, project_ids: projectIds }),
     }) as Promise<FoundationResult>,
+
+  deduceEpics: (projectId: string) =>
+    req(`/api/projects/${projectId}/epics`, { method: 'POST' }) as Promise<EpicsResult>,
 };
