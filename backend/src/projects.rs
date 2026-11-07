@@ -41,7 +41,7 @@ pub async fn require_member(
 
 async fn list(State(state): State<AppState>, user: AuthUser) -> Result<Json<Vec<Project>>, AppError> {
     let projects: Vec<Project> = sqlx::query_as(
-        "SELECT p.id, p.name, p.owner_id, p.created_at FROM projects p JOIN project_members m ON m.project_id = p.id WHERE m.user_id = $1 ORDER BY p.created_at DESC",
+        "SELECT p.id, p.name, p.owner_id, p.created_at, p.kind FROM projects p JOIN project_members m ON m.project_id = p.id WHERE m.user_id = $1 ORDER BY p.created_at DESC",
     )
     .bind(user.user_id)
     .fetch_all(&state.pool)
@@ -63,17 +63,30 @@ async fn create(
     if name.is_empty() {
         return Err(AppError::BadRequest("le nom du projet est requis".to_string()));
     }
-    let mut tx = state.pool.begin().await?;
+    let project = create_project_with_defaults(&state.pool, &name, user.user_id, "standard").await?;
+    Ok(Json(project))
+}
+
+/// Crée un projet avec son propriétaire et les colonnes par défaut.
+/// Utilisé par la création standard et par la fondation de socles (IA).
+pub async fn create_project_with_defaults(
+    pool: &PgPool,
+    name: &str,
+    owner_id: Uuid,
+    kind: &str,
+) -> Result<Project, AppError> {
+    let mut tx = pool.begin().await?;
     let project: Project = sqlx::query_as(
-        "INSERT INTO projects (name, owner_id) VALUES ($1, $2) RETURNING id, name, owner_id, created_at",
+        "INSERT INTO projects (name, owner_id, kind) VALUES ($1, $2, $3) RETURNING id, name, owner_id, created_at, kind",
     )
-    .bind(&name)
-    .bind(user.user_id)
+    .bind(name)
+    .bind(owner_id)
+    .bind(kind)
     .fetch_one(&mut *tx)
     .await?;
     sqlx::query("INSERT INTO project_members (project_id, user_id, role) VALUES ($1, $2, 'owner')")
         .bind(project.id)
-        .bind(user.user_id)
+        .bind(owner_id)
         .execute(&mut *tx)
         .await?;
     let default_columns = ["À faire", "En cours", "Terminé"];
@@ -86,7 +99,7 @@ async fn create(
             .await?;
     }
     tx.commit().await?;
-    Ok(Json(project))
+    Ok(project)
 }
 
 async fn detail(
@@ -96,7 +109,7 @@ async fn detail(
 ) -> Result<Json<ProjectDetail>, AppError> {
     require_member(&state.pool, user.user_id, project_id).await?;
     let project: Project = sqlx::query_as(
-        "SELECT id, name, owner_id, created_at FROM projects WHERE id = $1",
+        "SELECT id, name, owner_id, created_at, kind FROM projects WHERE id = $1",
     )
     .bind(project_id)
     .fetch_one(&state.pool)
