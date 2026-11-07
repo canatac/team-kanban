@@ -9,6 +9,7 @@ Gestion de projets collaborative minimaliste : des tableaux Kanban partagés en 
 - Tableaux Kanban : colonnes personnalisables, tâches en glisser-déposer
 - Assignation de tâches et commentaires
 - Synchro en temps réel : chaque modification apparaît immédiatement chez tous les collaborateurs connectés (WebSocket)
+- Projets « socle » : tickets communs déduits par IA de plusieurs projets
 
 ## Stack technique
 
@@ -196,3 +197,25 @@ Bascule « Kanban / Roadmap » dans la barre d'un tableau :
 
 Tarifs par défaut (euros / million de tokens, ajustables via l'environnement) :
 0,15 en entrée, 0,60 en sortie.
+
+### Projets socle (tickets communs)
+
+Depuis la page d'accueil, le bouton « Créer un socle (IA) » permet de
+sélectionner 2 à 8 projets :
+
+1. Le backend charge les tickets de chaque projet (fiche Scrum comprise,
+   jusqu'à 100 tickets par projet, triés par priorité métier).
+2. Mistral compare les tickets et identifie ceux dont l'intention métier est
+   **commune à au moins deux projets** ; pour chaque groupe, il rédige un
+   ticket commun ajusté et générique, avec fiche Scrum complète et
+   priorisation métier.
+3. Les tickets communs (jusqu'à 25) sont créés dans un nouveau projet de type
+   `foundation` (badge « Socle » sur l'accueil), dans la première colonne,
+   ordonnés par priorité. Leur description mentionne les projets sources.
+4. La consommation de l'appel de comparaison est répartie sur les tickets
+   du socle — le total du projet socle reste la somme exacte des lignes
+   `ai_usage`.
+
+Un socle s'utilise comme un projet normal (colonnes, drag & drop, fiches
+Scrum, découpage). Il est exclu des sources possibles d'un autre socle.
+API : `POST /api/foundation { name, project_ids }` → projet + tickets créés.
