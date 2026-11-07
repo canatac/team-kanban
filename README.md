@@ -186,8 +186,9 @@ Bascule « Kanban / Roadmap » dans la barre d'un tableau :
 
 ### Réorganisation en epics (IA)
 
-Le bouton « Organiser en epics » dans la barre d'un tableau (désactivé sous
-2 tickets) demande à Mistral de déduire la structure d'epics du projet :
+Le bouton « Organiser en epics » dans la barre d'un tableau (visible depuis
+les deux vues, Kanban et Roadmap ; désactivé sous 2 tickets) demande à Mistral
+de déduire la structure d'epics du projet :
 
 1. Le backend envoie au modèle les tickets de **premier niveau** (sans epic,
    ou déjà rattachés à un epic — les sous-tickets suivent leur parent) ainsi
