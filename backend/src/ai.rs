@@ -24,6 +24,8 @@ const MAX_BODY_BYTES: usize = 30 * 1024 * 1024;
 const MAX_TASKS: usize = 25;
 const MAX_CHILDREN: usize = 8;
 const MAX_FOUNDATION_PROJECTS: usize = 8;
+const MAX_EPIC_PLAN_TICKETS: usize = 150;
+const MAX_EPIC_GROUPS: usize = 15;
 
 /// Champs Scrum stricts attendus du modèle pour chaque ticket.
 const FICHE_RULES: &str = "Champs TOUS obligatoires et non vides :
@@ -44,6 +46,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/projects/:project_id/generate", post(generate))
         .route("/api/tasks/:task_id/scrum", post(scrum))
         .route("/api/tasks/:task_id/split", post(split))
+        .route("/api/projects/:project_id/epics", post(deduce_epics))
         .route("/api/foundation", post(foundation))
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
 }
@@ -1022,5 +1025,382 @@ seul projet, même s'ils semblent utiles."
     Ok(Json(FoundationResult {
         project,
         tasks: created,
+    }))
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/projects/:project_id/epics — réorganisation IA en epics
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+struct EpicsResult {
+    epics: Vec<Task>,
+    created: usize,
+    moved: usize,
+}
+
+#[derive(Deserialize)]
+struct AiEpicGroup {
+    #[serde(default)]
+    epic_id: Option<Uuid>,
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    task_ids: Vec<String>,
+    #[serde(flatten)]
+    fiche: AiFiche,
+}
+
+#[derive(Deserialize)]
+struct AiEpicPlan {
+    #[serde(default)]
+    epics: Vec<AiEpicGroup>,
+}
+
+/// Cible d'un ticket organisé : un epic existant, ou le groupe (index)
+/// d'un nouvel epic à créer.
+#[derive(Clone, Copy)]
+enum EpicTarget {
+    Existing(Uuid),
+    New(usize),
+}
+
+async fn deduce_epics(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Path(project_id): Path<Uuid>,
+) -> Result<Json<EpicsResult>, AppError> {
+    require_member(&state.pool, user.user_id, project_id).await?;
+
+    let (project_name,): (String,) = sqlx::query_as("SELECT name FROM projects WHERE id = $1")
+        .bind(project_id)
+        .fetch_one(&state.pool)
+        .await?;
+
+    let tasks: Vec<Task> = sqlx::query_as(&format!(
+        "SELECT {TASK_COLUMNS} FROM tasks WHERE project_id = $1 \
+         ORDER BY priority NULLS LAST, position"
+    ))
+    .bind(project_id)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let epic_ids: std::collections::HashSet<Uuid> = tasks
+        .iter()
+        .filter(|t| t.task_type == "epic")
+        .map(|t| t.id)
+        .collect();
+
+    // Tickets de premier niveau organisables : ni epics, ni enfants de
+    // story/task (les sous-tickets suivent leur parent dans la hiérarchie).
+    let candidates: Vec<&Task> = tasks
+        .iter()
+        .filter(|t| {
+            t.task_type != "epic"
+                && match t.parent_task_id {
+                    None => true,
+                    Some(p) => epic_ids.contains(&p),
+                }
+        })
+        .collect();
+    if candidates.len() < 2 {
+        return Err(AppError::BadRequest(
+            "pas assez de tickets de premier niveau à organiser (minimum 2)".to_string(),
+        ));
+    }
+    if candidates.len() > MAX_EPIC_PLAN_TICKETS {
+        return Err(AppError::BadRequest(format!(
+            "trop de tickets de premier niveau ({MAX_EPIC_PLAN_TICKETS} max) pour une réorganisation IA"
+        )));
+    }
+
+    // 1. Brief : epics existants + tickets de premier niveau.
+    let mut brief = format!("Projet : {project_name}\n\n");
+    if epic_ids.is_empty() {
+        brief.push_str("Aucun epic n'existe encore : crée les epics nécessaires.\n\n");
+    } else {
+        brief.push_str(
+            "## Epics existants (réutilise leur epic_id quand un groupe leur correspond)\n",
+        );
+        for t in tasks.iter().filter(|t| t.task_type == "epic") {
+            brief.push_str(&format!("- epic_id {} : {}", t.id, t.title));
+            if let Some(us) = t.user_story.as_deref() {
+                brief.push_str(&format!(" — {us}"));
+            }
+            brief.push('\n');
+        }
+        brief.push('\n');
+    }
+    brief.push_str("## Tickets de premier niveau à organiser\n");
+    for t in &candidates {
+        let pts = t
+            .story_points
+            .map(|p| p.to_string())
+            .unwrap_or_else(|| "-".into());
+        let prio = t
+            .priority
+            .map(|p| p.to_string())
+            .unwrap_or_else(|| "-".into());
+        brief.push_str(&format!(
+            "- task_id {} : [{}] {} ({} pts, P{})",
+            t.id, t.task_type, t.title, pts, prio
+        ));
+        if let Some(p) = t.parent_task_id {
+            if epic_ids.contains(&p) {
+                brief.push_str(&format!(" (actuellement rattaché à l'epic_id {p})"));
+            }
+        }
+        brief.push('\n');
+        if let Some(us) = t.user_story.as_deref() {
+            let short: String = us.chars().take(160).collect();
+            brief.push_str(&format!("  user story : {short}\n"));
+        }
+        let extra = t
+            .context
+            .as_deref()
+            .or(t.description.as_deref())
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
+        if let Some(ex) = extra {
+            let short: String = ex.chars().take(160).collect();
+            brief.push_str(&format!("  détail : {short}\n"));
+        }
+    }
+
+    // 2. Appel à Mistral : regroupement des tickets en epics.
+    let system = format!(
+        "Tu es un Product Owner Scrum senior. On te présente les tickets de premier niveau \
+d'un projet, avec ses epics existants. Ta mission : réorganiser TOUS ces tickets en epics \
+cohérents, pour la vue Roadmap (une swimlane par epic, triée par priorité métier).\n\
+Réponds STRICTEMENT en JSON, sans texte autour : {{\"epics\": [{{\"epic_id\": \"uuid EXACT d'un epic existant, ou null pour en créer un nouveau\", \
+\"title\": \"titre court du nouvel epic\", \"description\": \"résumé en 1 phrase de l'epic\", \
+{JSON_SHAPE}, \"task_ids\": [\"uuid\", ...]}}, ...]}}\n\
+{FICHE_RULES}\n\
+Règles :\n\
+- Un epic = une capacité ou une mission transverse, PAS un ticket individuel. Vise 3 à 8 \
+tickets par epic, {MAX_EPIC_GROUPS} epics maximum.\n\
+- epic_id : reprends l'uuid EXACT d'un epic existant quand le groupe lui correspond ; \
+sinon null et fournis un titre court. task_type d'un epic : \"epic\".\n\
+- task_ids : les uuid EXACTS des tickets de ce groupe. Chaque ticket fourni doit \
+apparaître dans EXACTEMENT un groupe — n'en omet aucun, même transverse ; \
+un groupe « Divers » vaut mieux qu'un ticket oublié.\n\
+- business_priority des epics : valeur métier, 1 pour l'epic le plus prioritaire, \
+priorités DISTINCTES entre epics.\n\
+- Ne modifie ni le titre ni le contenu des tickets : tu les regroupes, c'est tout."
+    );
+
+    let (plan, usage) = chat_json(
+        &state,
+        &system,
+        vec![serde_json::json!({ "type": "text", "text": brief })],
+    )
+    .await?;
+    let parsed: AiEpicPlan = serde_json::from_value(plan)
+        .map_err(|e| AppError::Internal(format!("réponse IA non exploitable : {e}")))?;
+
+    // 3. Validation : chaque ticket de premier niveau → un epic existant
+    //    ou un nouvel epic (index de groupe), sans doublon.
+    let candidate_ids: std::collections::HashSet<Uuid> =
+        candidates.iter().map(|t| t.id).collect();
+    let mut assigned: HashMap<Uuid, EpicTarget> = HashMap::new();
+    let mut priorities: Vec<(Uuid, i32)> = Vec::new();
+
+    for (gi, group) in parsed.epics.iter().enumerate().take(MAX_EPIC_GROUPS) {
+        let use_existing = matches!(group.epic_id, Some(eid) if epic_ids.contains(&eid));
+        if !use_existing && group.title.trim().is_empty() {
+            continue;
+        }
+        let mut group_tasks: Vec<Uuid> = Vec::new();
+        for raw in &group.task_ids {
+            if let Ok(id) = Uuid::parse_str(raw.trim()) {
+                if candidate_ids.contains(&id) && !assigned.contains_key(&id) {
+                    group_tasks.push(id);
+                }
+            }
+        }
+        if group_tasks.is_empty() {
+            continue;
+        }
+        if use_existing {
+            let eid = group.epic_id.unwrap();
+            for id in &group_tasks {
+                assigned.insert(*id, EpicTarget::Existing(eid));
+            }
+            if let Some(p) = group
+                .fiche
+                .business_priority
+                .filter(|p| (1..=10).contains(p))
+            {
+                let current = tasks
+                    .iter()
+                    .find(|e| e.id == eid)
+                    .and_then(|e| e.priority);
+                if current != Some(p) && !priorities.iter().any(|(e, _)| *e == eid) {
+                    priorities.push((eid, p));
+                }
+            }
+        } else {
+            for id in &group_tasks {
+                assigned.insert(*id, EpicTarget::New(gi));
+            }
+        }
+    }
+    if assigned.is_empty() {
+        return Err(AppError::BadRequest(
+            "l'IA n'a proposé aucune organisation exploitable — réessayez".to_string(),
+        ));
+    }
+
+    // 4. Crée les nouveaux epics, triés par priorité métier, dans la
+    //    première colonne du projet.
+    let mut new_indices: Vec<usize> = assigned
+        .values()
+        .filter_map(|t| match t {
+            EpicTarget::New(gi) => Some(*gi),
+            _ => None,
+        })
+        .collect();
+    new_indices.sort_unstable();
+    new_indices.dedup();
+    let mut new_sorted = new_indices;
+    new_sorted.sort_by_key(|gi| {
+        let p = parsed.epics[*gi].fiche.business_priority.unwrap_or(999);
+        (p, *gi)
+    });
+
+    let mut created_epics: HashMap<usize, Uuid> = HashMap::new();
+    if !new_sorted.is_empty() {
+        let first_column: Option<(Uuid,)> = sqlx::query_as(
+            "SELECT id FROM columns WHERE project_id = $1 ORDER BY position LIMIT 1",
+        )
+        .bind(project_id)
+        .fetch_optional(&state.pool)
+        .await?;
+        let first_column = first_column
+            .ok_or_else(|| {
+                AppError::BadRequest(
+                    "le projet n'a aucune colonne : créez-en une avant d'organiser les epics"
+                        .to_string(),
+                )
+            })?
+            .0;
+        let (max_pos,): (Option<f64>,) =
+            sqlx::query_as("SELECT MAX(position) FROM tasks WHERE column_id = $1")
+                .bind(first_column)
+                .fetch_one(&state.pool)
+                .await?;
+        let mut position = max_pos.unwrap_or(-1.0);
+
+        for gi in &new_sorted {
+            let group = &parsed.epics[*gi];
+            let mut fiche = group.fiche.clone();
+            fiche.task_type = Some("epic".to_string());
+            position += 1.0;
+            let epic = insert_task(
+                &state,
+                project_id,
+                first_column,
+                None,
+                group.title.trim(),
+                group.description.as_deref().map(str::trim),
+                position,
+                user.user_id,
+                &fiche,
+            )
+            .await?;
+            publish(
+                &state,
+                &project_id,
+                "task.created",
+                serde_json::to_value(&epic).unwrap_or(serde_json::Value::Null),
+            );
+            created_epics.insert(*gi, epic.id);
+        }
+    }
+    let created_count = created_epics.len();
+
+    // 5. Met à jour la priorité des epics existants réutilisés.
+    for (eid, p) in &priorities {
+        let updated: Task = sqlx::query_as(&format!(
+            "UPDATE tasks SET priority = $2, updated_at = now() \
+             WHERE id = $1 RETURNING {TASK_COLUMNS}"
+        ))
+        .bind(eid)
+        .bind(p)
+        .fetch_one(&state.pool)
+        .await?;
+        publish(
+            &state,
+            &project_id,
+            "task.updated",
+            serde_json::to_value(&updated).unwrap_or(serde_json::Value::Null),
+        );
+    }
+
+    // 6. Rattache chaque ticket de premier niveau à son epic (ou le
+    //    détache : un ticket sans groupe repart « hors epic »).
+    let mut moved = 0usize;
+    for t in &candidates {
+        let desired: Option<Uuid> = match assigned.get(&t.id) {
+            Some(EpicTarget::Existing(eid)) => Some(*eid),
+            Some(EpicTarget::New(gi)) => created_epics.get(gi).copied(),
+            None => None,
+        };
+        if desired == t.parent_task_id {
+            continue;
+        }
+        let updated: Task = sqlx::query_as(&format!(
+            "UPDATE tasks SET parent_task_id = $2, updated_at = now() \
+             WHERE id = $1 RETURNING {TASK_COLUMNS}"
+        ))
+        .bind(t.id)
+        .bind(desired)
+        .fetch_one(&state.pool)
+        .await?;
+        publish(
+            &state,
+            &project_id,
+            "task.updated",
+            serde_json::to_value(&updated).unwrap_or(serde_json::Value::Null),
+        );
+        moved += 1;
+    }
+
+    // 7. Comptabilité : consommation répartie sur les epics créés,
+    //    sinon rattachée au projet.
+    if created_count > 0 {
+        let share = Usage {
+            prompt_tokens: usage.prompt_tokens / created_count as i64,
+            completion_tokens: usage.completion_tokens / created_count as i64,
+            cost_eur: usage.cost_eur / created_count as f64,
+        };
+        for eid in created_epics.values() {
+            record_usage(&state, project_id, Some(*eid), share).await?;
+        }
+    } else {
+        record_usage(&state, project_id, None, usage).await?;
+    }
+
+    let epics_now: Vec<Task> = sqlx::query_as(&format!(
+        "SELECT {TASK_COLUMNS} FROM tasks WHERE project_id = $1 AND task_type = 'epic' \
+         ORDER BY priority NULLS LAST, position"
+    ))
+    .bind(project_id)
+    .fetch_all(&state.pool)
+    .await?;
+
+    tracing::info!(
+        project = %project_id,
+        created = created_count,
+        reprioritized = priorities.len(),
+        moved = moved,
+        "Tickets réorganisés en epics par IA"
+    );
+    Ok(Json(EpicsResult {
+        epics: epics_now,
+        created: created_count,
+        moved,
     }))
 }
