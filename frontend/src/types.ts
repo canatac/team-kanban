@@ -14,10 +14,13 @@ export interface UserLite {
   avatar_url: string | null;
 }
 
+export type ProjectKind = 'standard' | 'foundation';
+
 export interface Project {
   id: string;
   name: string;
   owner_id: string;
+  kind: ProjectKind;
   created_at: string;
 }
 
@@ -100,4 +103,9 @@ export interface ScrumResult {
 
 export interface SplitResult {
   created: Task[];
+}
+
+export interface FoundationResult {
+  project: Project;
+  tasks: Task[];
 }
