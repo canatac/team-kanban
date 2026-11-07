@@ -12,8 +12,8 @@ use uuid::Uuid;
 use crate::auth::AuthUser;
 use crate::error::AppError;
 use crate::events::publish;
-use crate::models::{Column, Task};
-use crate::projects::require_member;
+use crate::models::{Column, Project, Task};
+use crate::projects::{create_project_with_defaults, require_member};
 use crate::state::AppState;
 use crate::tasks::{get_task_row, TASK_COLUMNS};
 
@@ -23,6 +23,7 @@ const MAX_FILE_BYTES: usize = 10 * 1024 * 1024;
 const MAX_BODY_BYTES: usize = 30 * 1024 * 1024;
 const MAX_TASKS: usize = 25;
 const MAX_CHILDREN: usize = 8;
+const MAX_FOUNDATION_PROJECTS: usize = 8;
 
 /// Champs Scrum stricts attendus du modèle pour chaque ticket.
 const FICHE_RULES: &str = "Champs TOUS obligatoires et non vides :
@@ -43,6 +44,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/projects/:project_id/generate", post(generate))
         .route("/api/tasks/:task_id/scrum", post(scrum))
         .route("/api/tasks/:task_id/split", post(split))
+        .route("/api/foundation", post(foundation))
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
 }
 
@@ -794,4 +796,231 @@ fn file_to_message(
             "text": format!("--- Fichier joint : {file_name} ---\n{text}"),
         }))
     }
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/foundation — socle : tickets communs déduits de plusieurs projets
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct FoundationRequest {
+    name: String,
+    project_ids: Vec<Uuid>,
+}
+
+#[derive(Serialize)]
+struct FoundationResult {
+    project: Project,
+    tasks: Vec<Task>,
+}
+
+#[derive(Deserialize)]
+struct AiCommonTicket {
+    title: String,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    source_projects: Vec<String>,
+    #[serde(flatten)]
+    fiche: AiFiche,
+}
+
+#[derive(Deserialize)]
+struct AiFoundation {
+    #[serde(default)]
+    tasks: Vec<AiCommonTicket>,
+}
+
+async fn foundation(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Json(body): Json<FoundationRequest>,
+) -> Result<Json<FoundationResult>, AppError> {
+    let name = body.name.trim().to_string();
+    if name.is_empty() {
+        return Err(AppError::BadRequest(
+            "le nom du socle est requis".to_string(),
+        ));
+    }
+    let mut project_ids: Vec<Uuid> = Vec::new();
+    for id in body.project_ids {
+        if !project_ids.contains(&id) {
+            project_ids.push(id);
+        }
+    }
+    if project_ids.len() < 2 {
+        return Err(AppError::BadRequest(
+            "sélectionnez au moins 2 projets à fusionner".to_string(),
+        ));
+    }
+    if project_ids.len() > MAX_FOUNDATION_PROJECTS {
+        return Err(AppError::BadRequest(format!(
+            "maximum {MAX_FOUNDATION_PROJECTS} projets par socle"
+        )));
+    }
+    for pid in &project_ids {
+        require_member(&state.pool, user.user_id, *pid).await?;
+    }
+
+    // 1. Charge le nom et les tickets de chaque projet sélectionné.
+    let mut sections: Vec<(String, String)> = Vec::with_capacity(project_ids.len());
+    for pid in &project_ids {
+        let (pname,): (String,) = sqlx::query_as("SELECT name FROM projects WHERE id = $1")
+            .bind(pid)
+            .fetch_one(&state.pool)
+            .await?;
+        let tasks: Vec<Task> = sqlx::query_as(&format!(
+            "SELECT {TASK_COLUMNS} FROM tasks WHERE project_id = $1 \
+             ORDER BY priority NULLS LAST, position"
+        ))
+        .bind(pid)
+        .fetch_all(&state.pool)
+        .await?;
+        let mut section = String::new();
+        for t in tasks.iter().take(100) {
+            let pts = t.story_points.map(|p| p.to_string()).unwrap_or_else(|| "-".into());
+            let prio = t.priority.map(|p| p.to_string()).unwrap_or_else(|| "-".into());
+            section.push_str(&format!(
+                "- [{}] {} ({} pts, P{})",
+                t.task_type, t.title, pts, prio
+            ));
+            if let Some(us) = t.user_story.as_deref() {
+                section.push_str(&format!(" — {us}"));
+            }
+            section.push('\n');
+            let extra = t
+                .context
+                .as_deref()
+                .or(t.description.as_deref())
+                .map(str::trim)
+                .filter(|s| !s.is_empty());
+            if let Some(ex) = extra {
+                let short: String = ex.chars().take(280).collect();
+                section.push_str(&format!("  détail : {short}\n"));
+            }
+        }
+        if tasks.len() > 100 {
+            section.push_str(&format!(
+                "(… et {} autres tickets non listés)\n",
+                tasks.len() - 100
+            ));
+        }
+        sections.push((pname, section));
+    }
+
+    // 2. Appel à Mistral : comparaison et tickets communs.
+    let system = format!(
+        "Tu es un architecte logiciel et Product Owner senior. On te présente les tickets de \
+plusieurs projets. Ta mission : identifier les tickets dont l'intention métier est COMMUNE \
+à au moins deux projets, et rédiger pour chaque groupe UN ticket commun ajusté, valable \
+pour tous les projets concernés.\n\
+Réponds STRICTEMENT en JSON, sans texte autour : {{\"tasks\": [{{\"title\": \"titre court\", \
+\"description\": \"résumé en 1-2 phrases\", \"source_projects\": [\"Nom du projet\", ...], \
+{JSON_SHAPE}}}, ...]}}\n\
+{FICHE_RULES}\n\
+Règles :\n\
+- Un ticket commun regroupe des tickets d'AU MOINS DEUX projets fournis (même besoin métier, \
+même capacité, mêmes résultats — même si formulé différemment).\n\
+- Ajuste la formulation pour qu'elle soit générique : ni spécifique à un seul projet, ni \
+trop vague. Fusionne les fiches : la formulation la plus précise l'emporte.\n\
+- source_projects : les noms EXACTS des projets d'origine du groupe.\n\
+- Classe les tickets communs par business_priority : 1 pour le plus indispensable au socle.\n\
+- N'invente rien qui ne figure dans les tickets fournis ; ignore les tickets propres à un \
+seul projet, même s'ils semblent utiles."
+    );
+
+    let mut brief = String::from("Tickets de chaque projet :\n\n");
+    for (pname, section) in &sections {
+        brief.push_str(&format!("## Projet « {pname} »\n{section}\n"));
+    }
+
+    let (plan, usage) = chat_json(
+        &state,
+        &system,
+        vec![serde_json::json!({ "type": "text", "text": brief })],
+    )
+    .await?;
+    let parsed: AiFoundation = serde_json::from_value(plan)
+        .map_err(|e| AppError::Internal(format!("réponse IA non exploitable : {e}")))?;
+
+    // 3. Filtre les tickets communs exploitables, triés par priorité.
+    let mut common: Vec<&AiCommonTicket> = parsed
+        .tasks
+        .iter()
+        .filter(|c| !c.title.trim().is_empty() && fiche_is_complete(&c.fiche))
+        .collect();
+    common.sort_by_key(|c| c.fiche.business_priority.unwrap_or(999));
+    common.truncate(MAX_TASKS);
+    if common.is_empty() {
+        return Err(AppError::BadRequest(
+            "aucun ticket commun identifié entre les projets sélectionnés".to_string(),
+        ));
+    }
+
+    // 4. Crée le projet socle et sa première colonne.
+    let project = create_project_with_defaults(&state.pool, &name, user.user_id, "foundation")
+        .await?;
+    let (first_column,): (Uuid,) = sqlx::query_as(
+        "SELECT id FROM columns WHERE project_id = $1 ORDER BY position LIMIT 1",
+    )
+    .bind(project.id)
+    .fetch_one(&state.pool)
+    .await?;
+
+    // 5. Insère les tickets communs, provenance en tête de description.
+    let mut created: Vec<Task> = Vec::with_capacity(common.len());
+    for (i, ticket) in common.iter().enumerate() {
+        let sources: Vec<String> = ticket
+            .source_projects
+            .iter()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let description = {
+            let prov = if sources.is_empty() {
+                String::new()
+            } else {
+                format!("Ticket commun aux projets : {}. ", sources.join(", "))
+            };
+            match ticket.description.as_deref().map(str::trim) {
+                Some(d) if !d.is_empty() => format!("{prov}{d}"),
+                _ => prov.trim_end().to_string(),
+            }
+        };
+        let description = if description.is_empty() { None } else { Some(description) };
+        let task_row = insert_task(
+            &state,
+            project.id,
+            first_column,
+            None,
+            ticket.title.trim(),
+            description.as_deref(),
+            i as f64,
+            user.user_id,
+            &ticket.fiche,
+        )
+        .await?;
+        created.push(task_row);
+    }
+
+    // 6. Répartit la consommation de la comparaison sur les tickets créés.
+    let share = Usage {
+        prompt_tokens: usage.prompt_tokens / created.len() as i64,
+        completion_tokens: usage.completion_tokens / created.len() as i64,
+        cost_eur: usage.cost_eur / created.len() as f64,
+    };
+    for task_row in &created {
+        record_usage(&state, project.id, Some(task_row.id), share).await?;
+    }
+
+    tracing::info!(
+        project = %project.id,
+        sources = project_ids.len(),
+        common = created.len(),
+        "Socle créé par comparaison IA"
+    );
+    Ok(Json(FoundationResult {
+        project,
+        tasks: created,
+    }))
 }
