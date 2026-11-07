@@ -109,3 +109,9 @@ export interface FoundationResult {
   project: Project;
   tasks: Task[];
 }
+
+export interface EpicsResult {
+  epics: Task[];
+  created: number;
+  moved: number;
+}
