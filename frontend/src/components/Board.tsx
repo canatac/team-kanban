@@ -25,6 +25,7 @@ import {
   Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
@@ -41,6 +42,7 @@ import { fmtCost, fmtTokens, TYPE_COLORS, TYPE_LABELS } from '../format';
 import { useProjectSocket } from '../hooks/useProjectSocket';
 import type { Column, ProjectDetail, Task, UserLite } from '../types';
 import AiDialog from './AiDialog';
+import EpicsDialog from './EpicsDialog';
 import MembersDialog from './MembersDialog';
 import Roadmap, { PriorityChip } from './Roadmap';
 import TaskDialog from './TaskDialog';
@@ -57,6 +59,7 @@ export default function Board({ projectId, onBack }: { projectId: string; onBack
   const [newColumnName, setNewColumnName] = useState('');
   const [renameValue, setRenameValue] = useState('');
   const [aiOpen, setAiOpen] = useState(false);
+  const [epicsOpen, setEpicsOpen] = useState(false);
   const [view, setView] = useState<'board' | 'roadmap'>('board');
 
   const load = useCallback(async () => {
@@ -162,6 +165,17 @@ export default function Board({ projectId, onBack }: { projectId: string; onBack
     }
   }
 
+  // Tickets de premier niveau organisables en epics : ni epics eux-mêmes,
+  // ni enfants de story/task (les sous-tickets suivent leur parent).
+  const epicIds = new Set(
+    detail.tasks.filter((t) => t.task_type === 'epic').map((t) => t.id),
+  );
+  const firstLevel = detail.tasks.filter(
+    (t) =>
+      t.task_type !== 'epic' &&
+      (t.parent_task_id === null || epicIds.has(t.parent_task_id)),
+  );
+
   return (
     <Box>
       <Toolbar>
@@ -220,6 +234,19 @@ export default function Board({ projectId, onBack }: { projectId: string; onBack
         >
           Générer avec l'IA
         </Button>
+        <Tooltip title="Mistral regroupe les tickets de premier niveau en epics, puis bascule sur la vue Roadmap">
+          <span>
+            <Button
+              startIcon={<AccountTreeIcon />}
+              variant="outlined"
+              onClick={() => setEpicsOpen(true)}
+              disabled={firstLevel.length < 2}
+              sx={{ ml: 1 }}
+            >
+              Organiser en epics
+            </Button>
+          </span>
+        </Tooltip>
       </Toolbar>
       {error && (
         <Alert severity="error" onClose={() => setError(null)} sx={{ mx: 2, mb: 1 }}>
@@ -358,6 +385,18 @@ export default function Board({ projectId, onBack }: { projectId: string; onBack
         open={aiOpen}
         onClose={() => setAiOpen(false)}
         onGenerated={() => void loadRef.current()}
+      />
+      <EpicsDialog
+        open={epicsOpen}
+        projectId={projectId}
+        candidates={firstLevel.length}
+        epicCount={epicIds.size}
+        onClose={() => setEpicsOpen(false)}
+        onDone={() => {
+          setEpicsOpen(false);
+          void loadRef.current();
+          setView('roadmap');
+        }}
       />
       <MembersDialog
         open={membersOpen}
